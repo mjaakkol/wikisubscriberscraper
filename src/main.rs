@@ -33,7 +33,7 @@ use scraper::{
 use tokio::fs::read_to_string;
 
 async fn fetch(output_file: &Path) -> String {
-    let europe = "https://en.wikipedia.org/w/rest.php/v1/page/List_of_mobile_network_operators_of_Europe";
+    //let europe = "https://en.wikipedia.org/w/rest.php/v1/page/List_of_mobile_network_operators_of_Europe";
     let europe = "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_Europe&prop=text&formatversion=2&format=json&disabletoc=true";
 
     let client = Client::new();
@@ -46,9 +46,9 @@ async fn fetch(output_file: &Path) -> String {
 
         .await.unwrap();
 
-    //println!("{:?}", response);
+    //println!("{:?}", response.keys());
 
-    let j = serde_json::to_string(&response["source"]).expect("Converting JSON into string failed");
+    let j = serde_json::to_string(&response["parse"]["text"]).expect("Converting JSON into string failed");
 
     //let mut file = File::create(&output_file).expect("Opening file failed");
     //file.write_all(&j.as_bytes()).expect("Writing JSON file failed");
@@ -57,8 +57,12 @@ async fn fetch(output_file: &Path) -> String {
 }
 
 fn parse_page(text: &str) {
-    let document = Document::from(text);
+    let fragment = Html::parse_fragment(text);
+    let selector = Selector::parse("h2").unwrap();
 
+    for h2 in fragment.select(&selector) {
+        println!("{:?}", h2.text().collect::<Vec<_>>()[0]);
+    }
 }
 
 #[tokio::main]
@@ -101,6 +105,6 @@ async fn main()  {
         fetch(&output_file_path).await
     };
 
-    parse_page(content);
+    parse_page(&content);
 
 }
