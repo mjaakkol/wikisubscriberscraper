@@ -28,7 +28,8 @@ use clap::{
 
 use scraper::{
     Html,
-    Selector
+    Selector,
+    ElementRef
 };
 
 use log::{info, debug, warn};
@@ -58,6 +59,43 @@ async fn fetch(output_file: &Path) -> String {
     j
 }
 
+fn parse_header(rows: &ElementRef) -> (usize, usize) {
+
+    let mut header_iter = rows.select(&th_selector).skip(3);
+
+    let subscribers_unit = header_iter
+                                            .next()
+                                            .unwrap()
+                                            .text()
+                                            .collect::<Vec<_>>();
+
+    let multiplier = if subscribers_unit.len() > 1 {
+        let unit = subscribers_unit[1].to_lowercase();
+
+        if unit.contains("million") {
+            1_000_000
+        }
+        else if unit.contains("thousand") {
+            1_000
+        }
+        else if unit.contains("%") {
+            warn!("% needs to be removed");
+            0
+        }
+        else {
+            panic!("Unknown unit type");
+        }
+        }
+        else {
+        // Just Subscribers referes to direct number mapping
+            1
+        };
+
+    let n_remaining_items = header_iter.count();
+
+    (multiplier, n_remaining_items)
+}
+
 fn parse_page(text: &str) {
     info!("Parse page");
 
@@ -75,17 +113,7 @@ fn parse_page(text: &str) {
     for (rows, country) in table.zip(h2) {
         println!("{:?}", country.text().collect::<Vec<_>>()[0]);
 
-        // Handle Bulgaria thing
-        let mut subscribers_unit = rows
-                                            .select(&th_selector)
-                                            .skip(3)
-                                            .next()
-                                            .unwrap()
-                                            .text()
-                                            .collect::<Vec<_>>();
-
-
-        println!("{:?}", subscribers_unit);
+        let (multiplier, count) = parse_header(&rows);
 
         let mut pointer = rows
                                     .select(&td_selector)
