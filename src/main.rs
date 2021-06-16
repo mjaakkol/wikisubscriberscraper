@@ -4,7 +4,8 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    borrow::Cow
+    borrow::Cow,
+    iter::Iterator
 };
 
 use reqwest::{
@@ -30,10 +31,11 @@ use scraper::{
     Selector
 };
 
+use log::{info, debug, warn};
+
 use tokio::fs::read_to_string;
 
 async fn fetch(output_file: &Path) -> String {
-    //let europe = "https://en.wikipedia.org/w/rest.php/v1/page/List_of_mobile_network_operators_of_Europe";
     let europe = "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_Europe&prop=text&formatversion=2&format=json&disabletoc=true";
 
     let client = Client::new();
@@ -57,17 +59,36 @@ async fn fetch(output_file: &Path) -> String {
 }
 
 fn parse_page(text: &str) {
+    info!("Parse page");
+
     let fragment = Html::parse_fragment(text);
     let selector = Selector::parse("h2").unwrap();
 
-    for h2 in fragment.select(&selector) {
-        println!("{:?}", h2.text().collect::<Vec<_>>()[0]);
+    let h2 = fragment.select(&selector);
+
+    let table_selector = Selector::parse("table").unwrap();
+    let table = fragment.select(&table_selector);
+
+    let th_selector = Selector::parse("th").unwrap();
+    let td_selector = Selector::parse("td").unwrap();
+
+    for (rows, country) in table.zip(h2) {
+        println!("{:?}", country.text().collect::<Vec<_>>()[0]);
+        for row in rows.select(&th_selector) {
+            println!("{:?}", row.text().collect::<Vec<_>>());
+        }
+
+        for row in rows.select(&td_selector) {
+            println!("{:?}", row.text().collect::<Vec<_>>());
+        }
     }
 }
 
 #[tokio::main]
-async fn main()  {
-//async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//async fn main()  {
+    env_logger::init();
+
     let matches = App::new("Wiki mobile subscriber scraper")
                             .version("0.1")
                             .author("mikko.la.jaakkola@gmail.com")
@@ -106,5 +127,5 @@ async fn main()  {
     };
 
     parse_page(&content);
-
+    Ok(())
 }
