@@ -74,13 +74,36 @@ fn parse_page(text: &str) {
 
     for (rows, country) in table.zip(h2) {
         println!("{:?}", country.text().collect::<Vec<_>>()[0]);
-        for row in rows.select(&th_selector) {
-            println!("{:?}", row.text().collect::<Vec<_>>());
-        }
 
-        for row in rows.select(&td_selector) {
-            println!("{:?}", row.text().collect::<Vec<_>>());
-        }
+        // Handle Bulgaria thing
+        let mut subscribers_unit = rows
+                                            .select(&th_selector)
+                                            .skip(3)
+                                            .next()
+                                            .unwrap()
+                                            .text()
+                                            .collect::<Vec<_>>();
+
+
+        println!("{:?}", subscribers_unit);
+
+        let mut pointer = rows
+                                    .select(&td_selector)
+                                    .skip(1);
+
+        let operator = pointer
+                                    .next()
+                                    .unwrap()
+                                    .text()
+                                    .collect::<Vec<_>>()[0];
+
+        println!("{:?}", operator);
+
+        let technology = pointer.next().unwrap().text().collect::<Vec<_>>();
+        println!("{:?}", technology);
+
+        let mcc = pointer.skip(2).next().unwrap().text().collect::<Vec<_>>()[0];
+        println!("{:?}", mcc);
     }
 }
 
