@@ -58,7 +58,7 @@ enum ScrapeError {
 
 #[derive(Serialize,Debug)]
 struct CarrierInfo {
-    carrier: String,
+    operator: String,
     country: String,
     region: String,
     subscribers: f64,
@@ -66,15 +66,24 @@ struct CarrierInfo {
 }
 
 impl CarrierInfo {
-    fn new(carrier: &str, country: &str, region: &str, subscribers: f64, mccmnc: u32) -> Self {
+    fn new(operator: &str, country: &str, region: &str, subscribers: f64, mccmnc: u32) -> Self {
         Self {
-            carrier : carrier.to_owned(),
+            operator : operator.to_owned(),
             country : country.to_owned(),
             region : region.to_owned(),
             subscribers,
             mccmnc
         }
     }
+
+    fn gnerate_csv_header() -> String {
+        format!("Operator,Country,Region,Subscribers,MCCMNC\n")
+    }
+
+    fn to_csv(self) -> String {
+        format!("{},{},{},{},{}", self.operator, self.country, self.country, self.subscribers, self.mccmnc)
+    }
+
 }
 
 async fn fetch(uri: &str, tag: &str) -> String {
@@ -294,6 +303,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let serialized_carrier = serde_json::to_string(&all_carriers).expect("Serializing carriers failed");
+
+
 
     write(&output_file_path, &serialized_carrier.as_bytes()).await.expect("Writing JSON file failed");
 
