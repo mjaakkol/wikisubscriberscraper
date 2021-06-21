@@ -1,6 +1,7 @@
 use std::{
     str::FromStr,
     path::Path,
+    fmt,
     iter::Iterator,
 };
 
@@ -79,11 +80,12 @@ impl CarrierInfo {
     fn gnerate_csv_header() -> String {
         format!("Operator,Country,Region,Subscribers,MCCMNC\n")
     }
+}
 
-    fn to_csv(self) -> String {
-        format!("{},{},{},{},{}", self.operator, self.country, self.country, self.subscribers, self.mccmnc)
+impl fmt::Display for CarrierInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},{},{},{},{}", self.operator, self.country, self.region, self.subscribers, self.mccmnc)
     }
-
 }
 
 async fn fetch(uri: &str, tag: &str) -> String {
@@ -255,6 +257,8 @@ async fn parse_page(uri: &str, region: &str) -> Vec<CarrierInfo> {
     carriers
 }
 
+const JSON: &str = "json";
+const CSV: &str = "csv";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -272,9 +276,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .help("Output file name"))
                             .arg(Arg::with_name("format")
                                 .short("f")
-                                .long("file")
+                                .long("format")
                                 .help("Output format for the file")
                                 .value_name("OUTPUT_FORMAT")
+                                .possible_values(&[JSON, CSV])
                                 .help("Output file format"))
                             .get_matches();
 
@@ -284,9 +289,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let output_file_path = Path::new(output);
 
-    // Calling .unwrap() is safe here because "INPUT" is required (if "INPUT" wasn't
-    // required we could have used an 'if let' to conditionally get the value)
-    debug!("Using input file: {}", matches.value_of("format").unwrap());
+    let output_format = matches.value_of("format").unwrap_or(CSV);
+    debug!("Using input file: {}", output_format);
 
     let world = [
        ("Europe", "https://en.wikipedia.org/wiki/List_of_mobile_network_operators_of_Europe"),
@@ -302,9 +306,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let serialized_carrier = serde_json::to_string(&all_carriers).expect("Serializing carriers failed");
-
-
+    let serialized_carrier = match output_format {
+        JSON => serde_json::to_string(&all_carriers).expect("Serializing carriers failed"),
+        CSV => CarrierInfo::gnerate_csv_header() +
+                &all_carriers.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n"),
+        _ => panic!("Unrecognized format. This should not happen if clap works")
+    };
 
     write(&output_file_path, &serialized_carrier.as_bytes()).await.expect("Writing JSON file failed");
 
