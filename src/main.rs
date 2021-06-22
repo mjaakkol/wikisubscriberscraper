@@ -3,6 +3,7 @@ use std::{
     path::Path,
     fmt,
     iter::Iterator,
+    collections::HashMap
 };
 
 use reqwest::{
@@ -14,6 +15,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use serde::Serialize;
+use serde_json::Value;
 
 use clap::{
     Arg,
@@ -80,11 +82,26 @@ impl CarrierInfo {
     fn gnerate_csv_header() -> String {
         format!("Operator,Country,Region,Subscribers,MCCMNC\n")
     }
+
+    fn check_string(value: &str) -> String {
+        if let Some(_) = value.find(",") {
+            format!("\"{}\"", value)
+        }
+        else {
+            value.to_owned()
+        }
+    }
 }
 
 impl fmt::Display for CarrierInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{},{},{},{},{}", self.operator, self.country, self.region, self.subscribers, self.mccmnc)
+
+        write!(f, "{},{},{},{},{}",
+            CarrierInfo::check_string(&self.operator),
+            CarrierInfo::check_string(&self.country),
+            CarrierInfo::check_string(&self.region),
+            self.subscribers,
+            self.mccmnc)
     }
 }
 
@@ -102,10 +119,10 @@ async fn fetch(uri: &str, tag: &str) -> String {
             .get(uri)
             .send()
             .await.unwrap()
-            .text()
+            .json::<HashMap<String, Value>>()
             .await.unwrap();
 
-        response
+        response["parse"]["text"].to_string().replace("\\\"","")
     }
 }
 
@@ -227,20 +244,22 @@ async fn parse_page(uri: &str, region: &str) -> Vec<CarrierInfo> {
 
     let fragment = Html::parse_fragment(&text);
 
-    let main_page = Selector::parse(".mw-parser-output").unwrap();
-    let valid_subset = fragment.select(&main_page).next().unwrap();
+    // Not needed right now as moved into using Wikimedia parser API
+    //let main_page = Selector::parse(".mw-parser-output").unwrap();
+    //let valid_subset = fragment.select(&main_page).next().unwrap();
 
     let selector = Selector::parse("h2").unwrap();
 
-    let h2 = valid_subset.select(&selector);
+    let countries = fragment.select(&selector);
 
     let table_selector = Selector::parse("table[class^=wikitable]").unwrap();
-    let table = valid_subset.select(&table_selector);
+    let table = fragment.select(&table_selector);
 
     let tr_selector = Selector::parse("tr").unwrap();
 
-    for (rows, country) in table.zip(h2) {
-        let country = country.text().collect::<Vec<_>>()[0];
+    // Countries skip jumps over "contents" field in each page
+    for (rows, country) in table.zip(countries) {
+        let country = country.text().collect::<Vec<_>>()[0].to_string();
 
         if let Ok((multiplier, count)) = parse_header(&rows) {
             for row in rows.select(&tr_selector).skip(1) {
@@ -293,9 +312,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Using input file: {}", output_format);
 
     let world = [
-       ("Europe", "https://en.wikipedia.org/wiki/List_of_mobile_network_operators_of_Europe"),
-      ("Americas", "https://en.wikipedia.org/wiki/List_of_mobile_network_operators_of_the_Americas"),
-      ("MEA", "https://en.wikipedia.org/wiki/List_of_mobile_network_operators_of_the_Middle_East_and_Africa"),
+      ("Europe", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_Europe&prop=text&formatversion=2&disabletoc=true&format=json"),
+      ("Americas", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_the_Americas&prop=text&formatversion=2&disabletoc=true&format=json"),
+      ("MEA", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_the_Middle_East_and_Africa&prop=text&formatversion=2&disabletoc=true&format=json"),
     ];
 
     let mut all_carriers = Vec::new();
@@ -306,10 +325,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let serialized_carrier = match output_format {
-        JSON => serde_json::to_string(&all_carriers).expect("Serializing carriers failed"),
-        CSV => CarrierInfo::gnerate_csv_header() +
-                &all_carriers.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n"),
+    let (serialized_carrier, output_file_path) = match output_format {
+        JSON => (serde_json::to_string(&all_carriers).expect("Serializing carriers failed"), output_file_path.with_extension("json")),
+        CSV => (CarrierInfo::gnerate_csv_header() +
+                    &all_carriers
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("\n"),
+                output_file_path.with_extension("csv")),
         _ => panic!("Unrecognized format. This should not happen if clap works")
     };
 
