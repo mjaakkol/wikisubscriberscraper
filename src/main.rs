@@ -209,7 +209,7 @@ fn parse_carrier(carrier: &ElementRef, country: &str, region: &str, multiplier: 
                         .unwrap()
                         .as_str();
 
-                    let subscribers = f64::from_str(clean_text).unwrap() * (multiplier as f64);
+                    let subscribers = f64::from_str(clean_text).expect(&format!("Float parsing {} failed for {}", clean_text, operator)) * (multiplier as f64);
 
                     let mccmnc = if mcc {
                         let mcc = pointer.last().unwrap().text().collect::<Vec<_>>()[0];
