@@ -324,6 +324,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
       ("Europe", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_Europe&prop=text&formatversion=2&disabletoc=true&format=json"),
       ("Americas", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_the_Americas&prop=text&formatversion=2&disabletoc=true&format=json"),
       ("MEA", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_the_Middle_East_and_Africa&prop=text&formatversion=2&disabletoc=true&format=json"),
+      ("APAC", "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_mobile_network_operators_of_the_Asia_Pacific_region&prop=text&formatversion=2&disabletoc=true&format=json"),
     ];
 
     let mut all_carriers = Vec::new();
