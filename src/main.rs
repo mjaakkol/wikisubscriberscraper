@@ -70,9 +70,16 @@ struct CarrierInfo {
 
 impl CarrierInfo {
     fn new(operator: &str, country: &str, region: &str, subscribers: f64, mccmnc: u32) -> Self {
+        lazy_static! {
+            static ref RE_TRIM: Regex = Regex::new(r"(\\+n| *\(\S*)$").unwrap();
+        }
+
+        let clean_country = RE_TRIM.replace_all(country,"");
+        let clean_operator = RE_TRIM.replace_all(operator,"");
+
         Self {
-            operator : operator.to_owned(),
-            country : country.to_owned(),
+            operator : clean_operator.to_string(),
+            country : clean_country.to_string(),
             region : region.to_owned(),
             subscribers,
             mccmnc
@@ -122,6 +129,8 @@ async fn fetch(uri: &str, tag: &str) -> String {
             .json::<HashMap<String, Value>>()
             .await.unwrap();
 
+        // Wikipedia parser mangles quotation markers with backslashes and
+        // doesn't like it at all
         response["parse"]["text"].to_string().replace("\\\"","")
     }
 }
