@@ -1,5 +1,6 @@
 use std::{
     path::Path,
+    str::FromStr,
     collections::HashMap
 };
 
@@ -15,7 +16,6 @@ use clap::{
     App
 };
 
-
 use log::{debug, error};
 
 use tokio::fs::{
@@ -24,6 +24,7 @@ use tokio::fs::{
 };
 
 use thiserror::Error;
+
 
 mod carriers;
 
@@ -67,15 +68,31 @@ pub enum ScrapeError {
     EmptyOperator,
     #[error("Unwrapping header failed")]
     UnwrappingHeaderFailed,
+    #[error("Unsupported file-format")]
+    UnsupportedFileFormat,
 }
 
 const JSON: &str = "json";
 const CSV: &str = "csv";
 
+#[derive(Debug)]
 pub enum FileFormat {
     JSON,
     CSV
 }
+
+impl FromStr for FileFormat {
+    type Err = ScrapeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            JSON => Ok(FileFormat::JSON),
+            CSV => Ok(FileFormat::JSON),
+            _ => Err(ScrapeError::UnsupportedFileFormat)
+        }
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -106,16 +123,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut output_file_path = Path::new(output).to_path_buf();
 
-    let output_format = matches.value_of("format").unwrap_or(CSV);
-    debug!("Using input file: {}", output_format);
+    let output_format = FileFormat::from_str(matches.value_of("format").unwrap_or(CSV))?;
+    debug!("Using input file: {:?}", output_format);
 
     let carriers = carriers::Carriers::new();
 
-    let serialized_carrier = match output_format {
-        JSON => carriers.parse(FileFormat::JSON, &mut output_file_path).await,
-        CSV => carriers.parse(FileFormat::CSV, &mut output_file_path).await,
-        _ => panic!("Unrecognized format. This should not happen if clap works")
-    };
+    let serialized_carrier = carriers.parse(output_format, &mut output_file_path).await;
 
     write(&output_file_path, &serialized_carrier.as_bytes()).await.expect("Writing JSON file failed");
 
