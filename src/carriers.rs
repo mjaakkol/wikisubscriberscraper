@@ -1,34 +1,25 @@
-use std::{
-    str::FromStr,
-    fmt,
-    iter::Iterator,
-    path::PathBuf
-};
+use std::{fmt, iter::Iterator, path::PathBuf, str::FromStr};
 
 use serde::Serialize;
 
-use scraper::{
-    Html,
-    Selector,
-    ElementRef
-};
+use scraper::{ElementRef, Html, Selector};
 
 use lazy_static::lazy_static;
 
 use regex::Regex;
 
-use log::{info, debug, warn, error};
+use log::{debug, error, info, warn};
 
-use crate::ScrapeError;
 use crate::FileFormat;
+use crate::ScrapeError;
 
-#[derive(Serialize,Debug)]
+#[derive(Serialize, Debug)]
 struct CarrierInfo {
     operator: String,
     country: String,
     region: String,
     subscribers: f64,
-    mccmnc: u32
+    mccmnc: u32,
 }
 
 impl CarrierInfo {
@@ -37,27 +28,26 @@ impl CarrierInfo {
             static ref RE_TRIM: Regex = Regex::new(r"(\\+n| *\(\S*)$").unwrap();
         }
 
-        let clean_country = RE_TRIM.replace_all(country,"");
-        let clean_operator = RE_TRIM.replace_all(operator,"");
+        let clean_country = RE_TRIM.replace_all(country, "");
+        let clean_operator = RE_TRIM.replace_all(operator, "");
 
         Self {
-            operator : clean_operator.to_string(),
-            country : clean_country.to_string(),
-            region : region.to_owned(),
+            operator: clean_operator.to_string(),
+            country: clean_country.to_string(),
+            region: region.to_owned(),
             subscribers,
-            mccmnc
+            mccmnc,
         }
     }
 
-    fn gnerate_csv_header() -> String {
-        format!("Operator,Country,Region,Subscribers,MCCMNC\n")
+    fn generate_csv_header() -> String {
+        "Operator,Country,Region,Subscribers,MCCMNC\n".to_string()
     }
 
     fn check_string(value: &str) -> String {
-        if let Some(_) = value.find(",") {
+        if value.find(',').is_some() {
             format!("\"{}\"", value)
-        }
-        else {
+        } else {
             value.to_owned()
         }
     }
@@ -65,13 +55,15 @@ impl CarrierInfo {
 
 impl fmt::Display for CarrierInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-        write!(f, "{},{},{},{},{}",
+        write!(
+            f,
+            "{},{},{},{},{}",
             CarrierInfo::check_string(&self.operator),
             CarrierInfo::check_string(&self.country),
             CarrierInfo::check_string(&self.region),
             self.subscribers,
-            self.mccmnc)
+            self.mccmnc
+        )
     }
 }
 
@@ -105,19 +97,15 @@ impl Carriers {
 
                 if unit.contains("million") {
                     1_000_000
-                }
-                else if unit.contains("thousand") {
+                } else if unit.contains("thousand") {
                     1_000
-                }
-                else if unit.contains("%") {
+                } else if unit.contains('%') {
                     warn!("% needs to be removed");
                     return Err(ScrapeError::PercentageUnit);
-                }
-                else {
+                } else {
                     return Err(ScrapeError::UnknownUnit(unit));
                 }
-            }
-            else {
+            } else {
                 // Just Subscribers refers to direct number mapping
                 1
             };
@@ -125,18 +113,22 @@ impl Carriers {
             let n_remaining_items = header_iter.count();
 
             Ok((multiplier, n_remaining_items))
-        }
-        else {
+        } else {
             Err(ScrapeError::UnwrappingHeaderFailed)
         }
     }
 
-    fn parse_carrier(&self, carrier: &ElementRef, country: &str, region: &str, multiplier: usize, mcc: bool) -> Result<CarrierInfo, ScrapeError> {
+    fn parse_carrier(
+        &self,
+        carrier: &ElementRef,
+        country: &str,
+        region: &str,
+        multiplier: usize,
+        mcc: bool,
+    ) -> Result<CarrierInfo, ScrapeError> {
         // I don't want to deal with any percentage stuff now.
         if multiplier > 0 {
-            let mut pointer = carrier
-                                .select(&self.td_selector)
-                                .skip(1);
+            let mut pointer = carrier.select(&self.td_selector).skip(1);
 
             if let Some(operator_raw) = pointer.next() {
                 let operator = operator_raw.text().collect::<Vec<_>>()[0];
@@ -151,41 +143,43 @@ impl Carriers {
                         return Err(ScrapeError::SubscriberValueEmpty);
                     }
 
-                    let subscribers_text = subscribers_text[0].replace(" ","");
+                    let subscribers_text = subscribers_text[0].replace(" ", "");
 
                     if subscribers_text.chars().next().unwrap().is_numeric() {
-                        let clean_text = self.re_subs.captures(&subscribers_text)
+                        let clean_text = self
+                            .re_subs
+                            .captures(&subscribers_text)
                             .expect("Parsing number failed")
                             .get(0)
                             .unwrap()
                             .as_str();
 
-                        let subscribers = f64::from_str(clean_text).expect(&format!("Float parsing {} failed for {}", clean_text, operator)) * (multiplier as f64);
+                        let subscribers = f64::from_str(clean_text)
+                            .unwrap_or_else(|_| panic!("Float parsing {} failed for {}", clean_text, operator))
+                            * (multiplier as f64);
 
                         let mccmnc = if mcc {
                             let mcc = pointer.last().unwrap().text().collect::<Vec<_>>()[0];
                             if mcc.len() >= 5 {
                                 u32::from_str(&mcc[..5]).unwrap_or(0)
-                            }
-                            else {
+                            } else {
                                 0
                             }
-                        }
-                        else {
+                        } else {
                             0
                         };
 
                         debug!("{} {} Subscribers:{} MNC:{}", operator, country, subscribers, mccmnc);
 
                         return Ok(CarrierInfo::new(&operator, &country, &region, subscribers, mccmnc));
-
-                    }
-                    else {
-                        warn!("Dropping {} due to invalid subscriber number {}", operator, subscribers_text);
+                    } else {
+                        warn!(
+                            "Dropping {} due to invalid subscriber number {}",
+                            operator, subscribers_text
+                        );
                         return Err(ScrapeError::InvalidSubscriptions(operator.to_owned()));
                     }
-                }
-                else {
+                } else {
                     return Err(ScrapeError::SubscriberValueEmpty);
                 }
             }
@@ -219,17 +213,15 @@ impl Carriers {
                 for row in rows.select(&self.tr_selector).skip(1) {
                     match self.parse_carrier(&row, &country, &region, multiplier, count > 1) {
                         Ok(carrier) => carriers.push(carrier),
-                        Err(err) => error!("country:{} {}", country, err)
+                        Err(err) => error!("country:{} {}", country, err),
                     }
                 }
-            }
-            else {
+            } else {
                 error!("Failed to parse header. Dropping country {}", country);
             }
         }
         carriers
     }
-
 
     pub async fn parse(&self, format: FileFormat, output_path: &mut PathBuf) -> String {
         let world = [
@@ -242,24 +234,22 @@ impl Carriers {
         let mut all_carriers = Vec::new();
 
         for (region, uri) in world {
-            all_carriers.append(
-                &mut self.parse_page(&uri, region).await
-            );
+            all_carriers.append(&mut self.parse_page(&uri, region).await);
         }
 
         let serialized_carriers = match format {
             FileFormat::JSON => {
                 *output_path = output_path.with_extension("json");
                 serde_json::to_string(&all_carriers).expect("Serializing carriers failed")
-            },
+            }
             FileFormat::CSV => {
                 *output_path = output_path.with_extension("csv");
-                CarrierInfo::gnerate_csv_header() +
-                            &all_carriers
-                                .iter()
-                                .map(|x| x.to_string())
-                                .collect::<Vec<String>>()
-                                .join("\n")
+                CarrierInfo::generate_csv_header()
+                    + &all_carriers
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("\n")
             }
         };
         serialized_carriers
