@@ -1,14 +1,8 @@
-use std::{collections::HashMap, path::Path, str::FromStr};
-
-//use reqwest::Client;
-
-use serde_json::Value;
+use std::{path::Path, str::FromStr};
 
 use clap::{App, Arg};
 
 use log::{debug, error};
-
-//use tokio::fs::{read_to_string, write};
 
 use smol::fs;
 
@@ -23,19 +17,7 @@ async fn fetch(uri: &str, tag: &str) -> String {
     if cache_file_path.exists() {
         fs::read_to_string(&cache_file_path).await.unwrap()
     } else {
-        /*
-        let client = Client::new();
-
-        let response = client
-            .get(uri)
-            .send()
-            .await
-            .unwrap()
-            .json::<HashMap<String, Value>>()
-            .await
-            .unwrap();
-        */
-        let response = surf::get(uri).recv_json().await.expect("Failed to fetch URI");;
+        let response: serde_json::Value = surf::get(uri).recv_json().await.expect("Failed to fetch URI");
         // Wikipedia parser mangles quotation markers with backslashes and
         // doesn't like it at all
         response["parse"]["text"].to_string().replace("\\\"", "")
@@ -84,7 +66,6 @@ impl FromStr for FileFormat {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-//fn main() -> io::Result<()> {
     env_logger::init();
 
     let matches = App::new("Wiki mobile subscriber scraper")
