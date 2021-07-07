@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, str::FromStr};
 
-use reqwest::Client;
+//use reqwest::Client;
 
 use serde_json::Value;
 
@@ -8,7 +8,9 @@ use clap::{App, Arg};
 
 use log::{debug, error};
 
-use tokio::fs::{read_to_string, write};
+//use tokio::fs::{read_to_string, write};
+
+use smol::fs;
 
 use thiserror::Error;
 
@@ -19,8 +21,9 @@ async fn fetch(uri: &str, tag: &str) -> String {
     let cache_file_path = Path::new(&cache_filename);
 
     if cache_file_path.exists() {
-        read_to_string(&cache_file_path).await.unwrap()
+        fs::read_to_string(&cache_file_path).await.unwrap()
     } else {
+        /*
         let client = Client::new();
 
         let response = client
@@ -31,7 +34,8 @@ async fn fetch(uri: &str, tag: &str) -> String {
             .json::<HashMap<String, Value>>()
             .await
             .unwrap();
-
+        */
+        let response = surf::get(uri).recv_json().await.expect("Failed to fetch URI");;
         // Wikipedia parser mangles quotation markers with backslashes and
         // doesn't like it at all
         response["parse"]["text"].to_string().replace("\\\"", "")
@@ -79,8 +83,8 @@ impl FromStr for FileFormat {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+//fn main() -> io::Result<()> {
     env_logger::init();
 
     let matches = App::new("Wiki mobile subscriber scraper")
@@ -115,13 +119,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_format = FileFormat::from_str(matches.value_of("format").unwrap_or(CSV))?;
     debug!("Using input file: {:?}", output_format);
 
-    let carriers = carriers::Carriers::new();
+    smol::block_on(async {
+        let carriers = carriers::Carriers::new();
 
-    let serialized_carrier = carriers.parse(output_format, &mut output_file_path).await;
+        let serialized_carrier = carriers.parse(output_format, &mut output_file_path).await;
 
-    write(&output_file_path, &serialized_carrier.as_bytes())
-        .await
-        .expect("Writing JSON file failed");
+        fs::write(&output_file_path, &serialized_carrier.as_bytes())
+            .await
+            .expect("Writing JSON file failed");
 
-    Ok(())
+        Ok(())
+    })
 }
