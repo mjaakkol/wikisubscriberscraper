@@ -2,7 +2,7 @@ use std::{path::Path, str::FromStr};
 
 use clap::{App, Arg};
 
-use log::{debug, error};
+use log::{info, error};
 
 use smol::fs;
 
@@ -44,8 +44,8 @@ pub enum ScrapeError {
     UnsupportedFileFormat,
 }
 
-const JSON: &str = "json";
-const CSV: &str = "csv";
+const JSON_STR: &str = "json";
+const CSV_STR: &str = "csv";
 
 #[derive(Debug)]
 pub enum FileFormat {
@@ -58,8 +58,8 @@ impl FromStr for FileFormat {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            JSON => Ok(FileFormat::JSON),
-            CSV => Ok(FileFormat::JSON),
+            JSON_STR => Ok(FileFormat::JSON),
+            CSV_STR => Ok(FileFormat::CSV),
             _ => Err(ScrapeError::UnsupportedFileFormat),
         }
     }
@@ -69,14 +69,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let matches = App::new("Wiki mobile subscriber scraper")
-        .version("0.1")
+        .version("0.2")
         .author("mikko.la.jaakkola@gmail.com")
         .about("Donwloads mobile subscriber information into a file")
         .arg(
             Arg::with_name("output")
                 .short("o")
                 .long("output")
-                .value_name("OUTPUT")
+                //.value_name("OUTPUT")
                 .takes_value(true)
                 .help("Output file name"),
         )
@@ -84,21 +84,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arg::with_name("format")
                 .short("f")
                 .long("format")
+                .required(true)
                 .help("Output format for the file")
-                .value_name("OUTPUT_FORMAT")
-                .possible_values(&[JSON, CSV])
+                .takes_value(true)
+                .possible_values(&[JSON_STR, CSV_STR])
                 .help("Output file format"),
         )
         .get_matches();
 
     // Gets a value for config if supplied by user, or defaults to "default.conf"
     let output = matches.value_of("output").unwrap_or("default.json");
-    debug!("Value for output file: {}", output);
+    info!("Value for output file: {}", output);
 
     let mut output_file_path = Path::new(output).to_path_buf();
 
-    let output_format = FileFormat::from_str(matches.value_of("format").unwrap_or(CSV))?;
-    debug!("Using input file: {:?}", output_format);
+    let format_str = matches.value_of("format").expect("Invalid value. This should not happen");
+
+    info!("Output format at STR level: {:?}", format_str);
+
+    let output_format = FileFormat::from_str(format_str)?;
+    info!("Output format: {:?}", output_format);
 
     smol::block_on(async {
         let carriers = carriers::Carriers::new();
